@@ -84,13 +84,13 @@ async function record($: EngineInterface, skill: string, tokens: number) {
 export const register: Register = on => {
   on('session.start', async ($, e, next) => {
     await $.command.register({
-      name: 'skillmap',
-      description: 'Toggle the pane of skills loaded into this conversation; `/skillmap reset` clears it',
+      name: 'skill-map',
+      description: 'Toggle the pane of skills loaded into this conversation; `/skill-map reset` clears it',
     })
     return next(e)
   })
 
-  on('command.run', { command: 'skillmap' }, async ($, e) => {
+  on('command.run', { command: 'skill-map' }, async ($, e) => {
     if (e.args.trim() === 'reset') {
       await update($, loads, () => [])
       return { text: 'Skill map cleared.' }

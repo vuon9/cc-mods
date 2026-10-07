@@ -57,10 +57,10 @@ test('partial Read does not count', async ($, on) => {
   expect(await pane.find({ key: 'skill-tiny' })).toBe(undefined)
 })
 
-test('/skillmap reset clears every line', async ($, on) => {
+test('/skill-map reset clears every line', async ($, on) => {
   engineBeneath(on, { tiny: SMALL })
   await readSkill($, 'tiny')
-  await $.command.run({ command: 'skillmap', args: 'reset' })
+  await $.command.run({ command: 'skill-map', args: 'reset' })
   const pane = await $.ui.mount({ plugin: 'skill-map', surface: 'terminal', component: 'Pane', props: { title: 'Skills', isFocused: false }, requestId: 'skill-map' })
   expect(await pane.find({ key: 'skill-tiny' })).toBe(undefined)
 })
@@ -71,9 +71,9 @@ const toggles = [
 ]
 
 for (const row of toggles) {
-  test(`/skillmap: ${row.id}`, async ($, on) => {
+  test(`/skill-map: ${row.id}`, async ($, on) => {
     engineBeneath(on, {}, row.openPanes)
-    expect((await $.command.run({ command: 'skillmap', args: '' })).text).toBe(row.text)
+    expect((await $.command.run({ command: 'skill-map', args: '' })).text).toBe(row.text)
   })
 }
 

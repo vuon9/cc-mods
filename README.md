@@ -25,7 +25,7 @@ A side pane listing every skill loaded into the main conversation, one line each
 - After a compaction, a skill whose text was summarized away turns grey and crossed out.
 - The bar on top is the context window, filled to current usage, with a marker where each skill landed.
 
-`/skillmap` opens or closes the pane. `/skillmap reset` clears it. The pane opens by itself on the first skill load; in a terminal that only happens at 144 columns or wider, while `/skillmap` works at any width.
+`/skill-map` opens or closes the pane. `/skill-map reset` clears it. The pane opens by itself on the first skill load; in a terminal that only happens at 144 columns or wider, while `/skill-map` works at any width.
 
 Only the main conversation counts. Skills a subagent loads stay in the subagent's context and are left out.
 
