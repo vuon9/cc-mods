@@ -1,5 +1,9 @@
 # skill-map
 
+![skill-map pane with six skills, one reloaded and three greyed out after a compaction](screenshot.png)
+
+<sub>Drawn by the mod from sample data.</sub>
+
 A side pane listing every skill loaded into the main conversation, one line each:
 
 ```

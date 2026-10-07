@@ -1,5 +1,9 @@
 # token-weather
 
+![token-weather band above the prompt](screenshot.png)
+
+<sub>Drawn by the mod from sample data.</sub>
+
 A one-line forecast of the context window, shown above the prompt and updated after every turn:
 
 ```
