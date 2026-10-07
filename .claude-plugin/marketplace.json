@@ -1,0 +1,14 @@
+{
+  "name": "cc-mods",
+  "description": "Mods for Claude Code: live panes and hooks that run inside the CLI and the desktop app",
+  "owner": {
+    "name": "vuon9"
+  },
+  "plugins": [
+    {
+      "name": "skill-map",
+      "source": "./plugins/skill-map",
+      "description": "Pane showing which skills are loaded into the main conversation, how big they are, and where in the context window they landed"
+    }
+  ]
+}

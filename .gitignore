@@ -1,0 +1,3 @@
+# Written by Claude Code on each machine that loads a mod
+plugins/*/.claude-plugin/types/
+plugins/*/tsconfig.json

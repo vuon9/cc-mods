@@ -1,0 +1,7 @@
+{
+  "name": "skill-map",
+  "version": "0.1.0",
+  "description": "Pane showing which skills are loaded into the main conversation, how big they are, and where in the context window they landed",
+  "author": { "name": "vuon9" },
+  "types": "./types/index.d.ts"
+}
