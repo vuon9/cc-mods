@@ -9,6 +9,11 @@
       "name": "skill-map",
       "source": "./plugins/skill-map",
       "description": "Pane showing which skills are loaded into the main conversation, how big they are, and where in the context window they landed"
+    },
+    {
+      "name": "token-weather",
+      "source": "./plugins/token-weather",
+      "description": "A live forecast of the context window, shown above the prompt"
     }
   ]
 }
