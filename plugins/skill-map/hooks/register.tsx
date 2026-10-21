@@ -4,11 +4,16 @@ import type { EngineInterface, Register, SessionMessage } from 'claude-code'
 import type { SkillLoad } from '../types'
 
 const PANE = 'skill-map'
-// About 30 monospace cells is 210-240px at the usual 7-8px cell.
-const COLUMNS = 30
+// The dock adds 2 cells, so 19 at a ~7.6px cell stays under a 150px cap.
+const COLUMNS = 17
+// Fullscreen docks a pane beside the transcript from this width.
+const DOCK_FROM = 110
+// From this width a row also fits its reload count, context positions and turn.
+const DETAILS_FROM = 30
 const loads = atom({ plugin: 'skill-map', key: 'loads' } as const, [])
 const used = atom({ plugin: 'skill-map', key: 'used' } as const, 0)
 const turn = atom({ plugin: 'skill-map', key: 'turn' } as const, 0)
+const minimized = atom({ plugin: 'skill-map', key: 'minimized' } as const, false)
 
 const SMALL_MAX = 2000
 const MEDIUM_MAX = 6000
@@ -21,6 +26,9 @@ const tierOf = (tokens: number): Tier =>
 
 const estimate = (text: string) => Math.ceil(text.length / 4)
 const kilo = (tokens: number) => `${(tokens / 1000).toFixed(1)}k`
+
+const stats = (one: SkillLoad) =>
+  `${kilo(one.tokens)} ${one.reloads > 0 ? `${one.firstPercent}→${one.lastPercent}%` : `${one.lastPercent}%`} t${one.turn}`
 
 const blockText = (block: { type: string; [field: string]: unknown }): string => {
   if (block.type === 'text') return String(block.text)
@@ -61,6 +69,13 @@ async function isPaneUp($: EngineInterface) {
   return (await $.ui.panes()).some(pane => pane.id === PANE)
 }
 
+const open = ($: EngineInterface) => $.ui.open({ id: PANE, title: 'Skills', columns: COLUMNS })
+
+async function expand($: EngineInterface) {
+  await update($, minimized, () => false)
+  await open($)
+}
+
 async function record($: EngineInterface, skill: string, tokens: number) {
   const { context } = await $.session.usage()
   const percent = context.percent ?? 0
@@ -78,14 +93,14 @@ async function record($: EngineInterface, skill: string, tokens: number) {
     }
     return old === undefined ? [...list, entry] : list.map(one => (one === old ? entry : one))
   })
-  if (!(await isPaneUp($))) void $.ui.open({ id: PANE, title: 'Skills', columns: COLUMNS })
+  if (!(await read($, minimized)) && !(await isPaneUp($))) void open($)
 }
 
 export const register: Register = on => {
   on('session.start', async ($, e, next) => {
     await $.command.register({
       name: 'skill-map',
-      description: 'Toggle the pane of skills loaded into this conversation; `/skill-map reset` clears it',
+      description: 'Toggle the pane of skills loaded into this conversation; `/skill-map minimize` folds it above the prompt, `/skill-map reset` clears it',
     })
     return next(e)
   })
@@ -95,10 +110,42 @@ export const register: Register = on => {
       await update($, loads, () => [])
       return { text: 'Skill map cleared.' }
     }
+    if (e.args.trim() === 'minimize') {
+      await update($, minimized, () => true)
+      await $.ui.close({ id: PANE })
+      return { text: 'Skill map minimized to [+] above the prompt.' }
+    }
     const wasOpen = await isPaneUp($)
+    await update($, minimized, () => false)
     if (wasOpen) await $.ui.close({ id: PANE })
-    else await $.ui.open({ id: PANE, title: 'Skills', columns: COLUMNS })
-    return { text: wasOpen ? 'Skill map closed.' : 'Skill map opened.' }
+    else await open($)
+    if (wasOpen) return { text: 'Skill map closed.' }
+    const isNarrow = e.presentation.isFullscreen && e.presentation.columns < DOCK_FROM
+    return { text: isNarrow ? `Skill map shows beside the transcript once the terminal is ${DOCK_FROM} columns wide.` : 'Skill map opened.' }
+  })
+
+  // The ✕ is the engine's; a person's close minimizes to the band, `/skill-map` closes for good.
+  on('ui.close', { id: PANE }, async ($, e, next) => {
+    const result = await next(e)
+    if (e.origin.kind === 'person') await update($, minimized, () => true)
+    return result
+  })
+
+  on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
+    if (e.props.hasSurvey || !(await read($, minimized))) return next(e)
+    const { Box, Button, Text } = $.ui.resolve(e)
+    const list = await read($, loads)
+    const fill = await read($, used)
+    return (
+      <Box>
+        {await next(e)}
+        <Box marginLeft={2}>
+          <Button plain key="skill-map-expand" onPress={() => expand($)}>
+            [+] <Text dimColor>skills {list.length} · {fill}%</Text>
+          </Button>
+        </Box>
+      </Box>
+    )
   })
 
   on('prompt.submit', async ($, e, next) => {
@@ -138,9 +185,17 @@ export const register: Register = on => {
 
   on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
     const { Box, Text } = $.ui.resolve(e)
+    // A sidebar only: seated inline over a narrow fullscreen terminal, reopen it from a timer. That open is
+    // unasked, so the engine holds the pane undrawn until the terminal is wide enough to dock it again.
+    if (e.props.placement === 'inline' && e.viewport?.isFullscreen === true) {
+      $.clock.after(0, () => void $.ui.close({ id: PANE }).then(() => open($)))
+      return <Box />
+    }
     const list = await read($, loads)
     const fill = await read($, used)
-    const width = Math.min(COLUMNS, e.viewport?.columns ?? COLUMNS)
+    // Docked, fill the dock so dragging it wider shows long names whole; inline spans the terminal, so stay narrow.
+    const width = e.props.placement === 'dock' ? e.props.bodyColumns : Math.min(COLUMNS, e.viewport?.columns ?? COLUMNS)
+    const isRoomy = width >= DETAILS_FROM
     const barWidth = width - 5
     const cells = Array.from({ length: barWidth }, (_, i) => {
       const at = list.findLast(one => Math.min(barWidth - 1, Math.floor((one.lastPercent / 100) * barWidth)) === i)
@@ -159,25 +214,22 @@ export const register: Register = on => {
           <Text dimColor> {fill}%</Text>
         </Text>
         <Text dimColor>
-          <Text color={TIER_COLOR.small}>■</Text> &lt;2k <Text color={TIER_COLOR.medium}>■</Text> 2-6k{' '}
-          <Text color={TIER_COLOR.large}>■</Text> 6k+
+          <Text color={TIER_COLOR.small}>■</Text>&lt;2k <Text color={TIER_COLOR.medium}>■</Text>2-6k{' '}
+          <Text color={TIER_COLOR.large}>■</Text>6k+
         </Text>
         <Text> </Text>
-        {list.length === 0 && <Text dimColor>No skills loaded yet.</Text>}
+        {list.length === 0 && <Text dimColor>No skills yet.</Text>}
         {list.map(one => (
           <Box key={`skill-${one.skill}`} flexDirection="row" width={width}>
-            <Box flexShrink={1}>
+            <Box flexGrow={1} flexShrink={1}>
               <Text dimColor={one.isCompacted} strikethrough={one.isCompacted} wrap="truncate-end">
                 <Text color={TIER_COLOR[tierOf(one.tokens)]}>■ </Text>
                 {one.skill}
-                {one.reloads > 0 && <Text bold> [+{one.reloads}]</Text>}
+                {isRoomy && one.reloads > 0 && <Text bold> [+{one.reloads}]</Text>}
               </Text>
             </Box>
             <Box flexShrink={0}>
-              <Text dimColor>
-                {' '}
-                {kilo(one.tokens)} {one.reloads > 0 ? `${one.firstPercent}→${one.lastPercent}%` : `${one.lastPercent}%`} t{one.turn}
-              </Text>
+              <Text dimColor> {isRoomy ? stats(one) : kilo(one.tokens)}</Text>
             </Box>
           </Box>
         ))}
