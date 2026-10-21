@@ -4,8 +4,8 @@ import type { EngineInterface, Register, SessionMessage } from 'claude-code'
 import type { SkillLoad } from '../types'
 
 const PANE = 'skill-map'
-// About 30 monospace cells is 210-240px at the usual 7-8px cell.
-const COLUMNS = 30
+// The dock adds 2 cells, so 19 at a ~7.6px cell stays under a 150px cap.
+const COLUMNS = 17
 const loads = atom({ plugin: 'skill-map', key: 'loads' } as const, [])
 const used = atom({ plugin: 'skill-map', key: 'used' } as const, 0)
 const turn = atom({ plugin: 'skill-map', key: 'turn' } as const, 0)
@@ -21,6 +21,17 @@ const tierOf = (tokens: number): Tier =>
 
 const estimate = (text: string) => Math.ceil(text.length / 4)
 const kilo = (tokens: number) => `${(tokens / 1000).toFixed(1)}k`
+
+const stats = (one: SkillLoad) =>
+  `${kilo(one.tokens)} ${one.reloads > 0 ? `${one.firstPercent}→${one.lastPercent}%` : `${one.lastPercent}%`} t${one.turn}`
+
+const chunks = (text: string, size: number) =>
+  Array.from({ length: Math.ceil(text.length / size) }, (_, i) => text.slice(i * size, (i + 1) * size))
+
+export const cardLines = (one: SkillLoad, width: number) =>
+  [...chunks(one.reloads > 0 ? `${one.skill} [+${one.reloads}]` : one.skill, width), stats(one)].map(line =>
+    line.padEnd(width),
+  )
 
 const blockText = (block: { type: string; [field: string]: unknown }): string => {
   if (block.type === 'text') return String(block.text)
@@ -159,28 +170,40 @@ export const register: Register = on => {
           <Text dimColor> {fill}%</Text>
         </Text>
         <Text dimColor>
-          <Text color={TIER_COLOR.small}>■</Text> &lt;2k <Text color={TIER_COLOR.medium}>■</Text> 2-6k{' '}
-          <Text color={TIER_COLOR.large}>■</Text> 6k+
+          <Text color={TIER_COLOR.small}>■</Text>&lt;2k <Text color={TIER_COLOR.medium}>■</Text>2-6k{' '}
+          <Text color={TIER_COLOR.large}>■</Text>6k+
         </Text>
         <Text> </Text>
-        {list.length === 0 && <Text dimColor>No skills loaded yet.</Text>}
-        {list.map(one => (
-          <Box key={`skill-${one.skill}`} flexDirection="row" width={width}>
-            <Box flexShrink={1}>
-              <Text dimColor={one.isCompacted} strikethrough={one.isCompacted} wrap="truncate-end">
-                <Text color={TIER_COLOR[tierOf(one.tokens)]}>■ </Text>
-                {one.skill}
-                {one.reloads > 0 && <Text bold> [+{one.reloads}]</Text>}
-              </Text>
+        {list.length === 0 && <Text dimColor>No skills yet.</Text>}
+        {list.map(one => {
+          const card = cardLines(one, width)
+          return (
+            <Box key={`skill-${one.skill}`} flexDirection="row" width={width}>
+              <Box flexGrow={1} flexShrink={1}>
+                <Text dimColor={one.isCompacted} strikethrough={one.isCompacted} wrap="truncate-end">
+                  <Text color={TIER_COLOR[tierOf(one.tokens)]}>■ </Text>
+                  {one.skill}
+                </Text>
+              </Box>
+              <Box flexShrink={0}>
+                <Text dimColor> {kilo(one.tokens)}</Text>
+              </Box>
+              <Box
+                position="absolute"
+                top={-card.length}
+                left={0}
+                width={width}
+                flexDirection="column"
+                display="none"
+                hover={{ display: 'flex' }}
+              >
+                {card.map(line => (
+                  <Text inverse>{line}</Text>
+                ))}
+              </Box>
             </Box>
-            <Box flexShrink={0}>
-              <Text dimColor>
-                {' '}
-                {kilo(one.tokens)} {one.reloads > 0 ? `${one.firstPercent}→${one.lastPercent}%` : `${one.lastPercent}%`} t{one.turn}
-              </Text>
-            </Box>
-          </Box>
-        ))}
+          )
+        })}
       </Box>
     )
   })

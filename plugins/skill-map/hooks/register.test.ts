@@ -1,7 +1,7 @@
 import type { Engine, On } from 'claude-code'
 import { expect, test } from 'claude-code/testing'
 
-import { skillOfRow, skillsIn } from './register'
+import { cardLines, skillOfRow, skillsIn } from './register'
 
 const MEDIUM = 'm'.repeat(12_000)
 const SMALL = 's'.repeat(2_000)
@@ -20,15 +20,41 @@ function engineBeneath(on: On, bodies: Record<string, string>, openPanes: string
 const readSkill = ($: Engine, skill: string) => $.tool.call({ tool: 'Read', file_path: `/skills/${skill}/SKILL.md` })
 
 for (const surface of ['terminal', 'desktop'] as const) {
-  test(`${surface}: one line per skill with size, reload count and position`, async ($, on) => {
+  test(`${surface}: one line per skill with name and size, the rest in a card shown on hover`, async ($, on) => {
     engineBeneath(on, { vmode: SMALL, big: MEDIUM })
     await readSkill($, 'vmode')
     await readSkill($, 'vmode')
     await readSkill($, 'big')
     const pane = await $.ui.mount({ plugin: 'skill-map', surface, component: 'Pane', props: { title: 'Skills', isFocused: false }, requestId: 'skill-map' })
-    expect((await pane.find({ key: 'skill-vmode' }))?.text).toBe('■ vmode [+1] 0.5k 15→15% t0')
-    expect((await pane.find({ key: 'skill-big' }))?.text).toBe('■ big 3.0k 15% t0')
-    expect((await pane.find({ key: 'skill-big' }))?.props.width).toBe(30)
+    const rows = await Promise.all(['skill-vmode', 'skill-big'].map(key => pane.find({ key })))
+    expect(rows.map(row => [row?.text, row?.props.width])).toEqual([
+      [`■ vmode 0.5k${'vmode [+1]'.padEnd(17)}${'0.5k 15→15% t0'.padEnd(17)}`, 17],
+      [`■ big 3.0k${'big'.padEnd(17)}${'3.0k 15% t0'.padEnd(17)}`, 17],
+    ])
+    const cards = (await pane.findAll({ type: 'Box' })).filter(box => box.props.position === 'absolute')
+    expect(cards.map(card => [card.props.display, card.props.top])).toEqual([
+      ['none', -2],
+      ['none', -2],
+    ])
+    expect(JSON.stringify(await pane.drawn()).match(/"display":"none"\},"hover":\{"display":"flex"\}/g)).toHaveLength(2)
+  })
+}
+
+const load = { skill: 'big', tokens: 3_000, firstPercent: 4, lastPercent: 15, turn: 2, reloads: 0, isCompacted: false }
+
+const cards = [
+  { id: 'short name', one: load, want: ['big', '3.0k 15% t2'] },
+  { id: 'reloaded', one: { ...load, reloads: 2 }, want: ['big [+2]', '3.0k 4→15% t2'] },
+  {
+    id: 'long name wraps at the width',
+    one: { ...load, skill: 'cowork-plugin-management:cowork-plugin-customizer' },
+    want: ['cowork-plugin-man', 'agement:cowork-pl', 'ugin-customizer', '3.0k 15% t2'],
+  },
+]
+
+for (const row of cards) {
+  test(`card: ${row.id}`, () => {
+    expect(cardLines(row.one, 17)).toEqual(row.want.map(line => line.padEnd(17)))
   })
 }
 
