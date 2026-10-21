@@ -1,15 +1,22 @@
 import type { Engine, On } from 'claude-code'
-import { expect, test } from 'claude-code/testing'
+import { expect, mock, test } from 'claude-code/testing'
 
-import { cardLines, skillOfRow, skillsIn } from './register'
+import { skillOfRow, skillsIn } from './register'
 
 const MEDIUM = 'm'.repeat(12_000)
 const SMALL = 's'.repeat(2_000)
 
-function engineBeneath(on: On, bodies: Record<string, string>, openPanes: string[] = []) {
+function engineBeneath(on: On, bodies: Record<string, string>, openPanes: string[] = [], opens: string[] = [], closes: string[] = []) {
   on('session.usage', () => ({ value: { startedAt: 0, context: { window: 200_000, tokens: 30_000, percent: 15 }, rateLimits: [] } }))
-  on('ui.open', () => ({ value: { isPlaced: true } }))
-  on('ui.close', () => ({ value: undefined }))
+  on('ui.open', (_, e) => {
+    opens.push(e.id)
+    return { value: { isPlaced: true } }
+  })
+  on('ui.render', { component: 'AbovePrompt' }, () => ({ type: 'Text', props: {}, children: ['weather'] }))
+  on('ui.close', (_, e) => {
+    closes.push(e.id)
+    return { value: undefined }
+  })
   on('ui.panes', () => ({ value: openPanes.map(id => ({ id, title: 'Skills', isShown: true, isFocused: false, isPlaced: true })) }))
   on('tool.call', { tool: 'Read' }, (_, e) => {
     const text = bodies[e.file_path.split('/').at(-2) ?? '']
@@ -20,41 +27,37 @@ function engineBeneath(on: On, bodies: Record<string, string>, openPanes: string
 const readSkill = ($: Engine, skill: string) => $.tool.call({ tool: 'Read', file_path: `/skills/${skill}/SKILL.md` })
 
 for (const surface of ['terminal', 'desktop'] as const) {
-  test(`${surface}: one line per skill with name and size, the rest in a card shown on hover`, async ($, on) => {
+  test(`${surface}: a roomy dock shows each skill's size, reloads, context positions and turn`, async ($, on) => {
     engineBeneath(on, { vmode: SMALL, big: MEDIUM })
     await readSkill($, 'vmode')
     await readSkill($, 'vmode')
     await readSkill($, 'big')
-    const pane = await $.ui.mount({ plugin: 'skill-map', surface, component: 'Pane', props: { title: 'Skills', isFocused: false }, requestId: 'skill-map' })
+    const pane = await $.ui.mount({ plugin: 'skill-map', surface, component: 'Pane', props: { title: 'Skills', isFocused: false, placement: 'dock' as const, bodyColumns: 40 }, requestId: 'skill-map' })
     const rows = await Promise.all(['skill-vmode', 'skill-big'].map(key => pane.find({ key })))
-    expect(rows.map(row => [row?.text, row?.props.width])).toEqual([
-      [`■ vmode 0.5k${'vmode [+1]'.padEnd(17)}${'0.5k 15→15% t0'.padEnd(17)}`, 17],
-      [`■ big 3.0k${'big'.padEnd(17)}${'3.0k 15% t0'.padEnd(17)}`, 17],
-    ])
-    const cards = (await pane.findAll({ type: 'Box' })).filter(box => box.props.position === 'absolute')
-    expect(cards.map(card => [card.props.display, card.props.top])).toEqual([
-      ['none', -2],
-      ['none', -2],
-    ])
-    expect(JSON.stringify(await pane.drawn()).match(/"display":"none"\},"hover":\{"display":"flex"\}/g)).toHaveLength(2)
+    expect(rows.map(row => row?.text)).toEqual(['■ vmode [+1] 0.5k 15→15% t0', '■ big 3.0k 15% t0'])
   })
 }
 
-const load = { skill: 'big', tokens: 3_000, firstPercent: 4, lastPercent: 15, turn: 2, reloads: 0, isCompacted: false }
-
-const cards = [
-  { id: 'short name', one: load, want: ['big', '3.0k 15% t2'] },
-  { id: 'reloaded', one: { ...load, reloads: 2 }, want: ['big [+2]', '3.0k 4→15% t2'] },
-  {
-    id: 'long name wraps at the width',
-    one: { ...load, skill: 'cowork-plugin-management:cowork-plugin-customizer' },
-    want: ['cowork-plugin-man', 'agement:cowork-pl', 'ugin-customizer', '3.0k 15% t2'],
-  },
+const widths = [
+  { id: 'docked at its opening width: name and size', placement: 'dock' as const, bodyColumns: 17, want: [17, '■ big 3.0k'] },
+  { id: 'docked and dragged wider: the details too', placement: 'dock' as const, bodyColumns: 40, want: [40, '■ big 3.0k 15% t0'] },
+  { id: 'inline across a wide terminal: stays narrow', placement: 'inline' as const, bodyColumns: 120, want: [17, '■ big 3.0k'] },
 ]
 
-for (const row of cards) {
-  test(`card: ${row.id}`, () => {
-    expect(cardLines(row.one, 17)).toEqual(row.want.map(line => line.padEnd(17)))
+for (const row of widths) {
+  test(`width: ${row.id}`, async ($, on) => {
+    engineBeneath(on, { big: MEDIUM })
+    await readSkill($, 'big')
+    const pane = await $.ui.mount({
+      plugin: 'skill-map',
+      surface: 'terminal',
+      component: 'Pane',
+      props: { title: 'Skills', isFocused: false, placement: row.placement, bodyColumns: row.bodyColumns },
+      requestId: 'skill-map',
+      viewport: { columns: 120, rows: 40 },
+    })
+    const big = await pane.find({ key: 'skill-big' })
+    expect([big?.props.width, big?.text]).toEqual(row.want)
   })
 }
 
@@ -71,7 +74,7 @@ for (const row of commands) {
     engineBeneath(on, {})
     on('tool.call', { tool: 'Bash' }, () => ({ result: { stdout: SMALL, stderr: '', interrupted: false }, text: SMALL }))
     await $.tool.call({ tool: 'Bash', command: row.command })
-    const pane = await $.ui.mount({ plugin: 'skill-map', surface: 'terminal', component: 'Pane', props: { title: 'Skills', isFocused: false }, requestId: 'skill-map' })
+    const pane = await $.ui.mount({ plugin: 'skill-map', surface: 'terminal', component: 'Pane', props: { title: 'Skills', isFocused: false, placement: 'dock' as const, bodyColumns: 17 }, requestId: 'skill-map' })
     expect((await pane.find({ key: 'skill-tiny' })) !== undefined).toBe(row.isCounted)
   })
 }
@@ -79,7 +82,7 @@ for (const row of commands) {
 test('partial Read does not count', async ($, on) => {
   engineBeneath(on, { tiny: SMALL })
   await $.tool.call({ tool: 'Read', file_path: '/skills/tiny/SKILL.md', limit: 10 })
-  const pane = await $.ui.mount({ plugin: 'skill-map', surface: 'terminal', component: 'Pane', props: { title: 'Skills', isFocused: false }, requestId: 'skill-map' })
+  const pane = await $.ui.mount({ plugin: 'skill-map', surface: 'terminal', component: 'Pane', props: { title: 'Skills', isFocused: false, placement: 'dock' as const, bodyColumns: 17 }, requestId: 'skill-map' })
   expect(await pane.find({ key: 'skill-tiny' })).toBe(undefined)
 })
 
@@ -87,7 +90,7 @@ test('/skill-map reset clears every line', async ($, on) => {
   engineBeneath(on, { tiny: SMALL })
   await readSkill($, 'tiny')
   await $.command.run({ command: 'skill-map', args: 'reset' })
-  const pane = await $.ui.mount({ plugin: 'skill-map', surface: 'terminal', component: 'Pane', props: { title: 'Skills', isFocused: false }, requestId: 'skill-map' })
+  const pane = await $.ui.mount({ plugin: 'skill-map', surface: 'terminal', component: 'Pane', props: { title: 'Skills', isFocused: false, placement: 'dock' as const, bodyColumns: 17 }, requestId: 'skill-map' })
   expect(await pane.find({ key: 'skill-tiny' })).toBe(undefined)
 })
 
@@ -99,9 +102,75 @@ const toggles = [
 for (const row of toggles) {
   test(`/skill-map: ${row.id}`, async ($, on) => {
     engineBeneath(on, {}, row.openPanes)
-    expect((await $.command.run({ command: 'skill-map', args: '' })).text).toBe(row.text)
+    expect((await $.command.run({ command: 'skill-map', args: '', presentation: { isFullscreen: true, columns: 200 } })).text).toBe(row.text)
   })
 }
+
+const mountPane = ($: Engine) =>
+  $.ui.mount({ plugin: 'skill-map', surface: 'terminal', component: 'Pane', props: { title: 'Skills', isFocused: false, placement: 'dock' as const, bodyColumns: 17 }, requestId: 'skill-map' })
+const mountBand = ($: Engine) =>
+  $.ui.mount({ plugin: 'skill-map', surface: 'terminal', component: 'AbovePrompt', props: { hasSurvey: false, isWorking: false, maxRows: 5, bodyColumns: 100 } })
+
+test('minimized: a [+] chip beside the prompt row, and the chip brings the pane back', async ($, on) => {
+  const opens: string[] = []
+  engineBeneath(on, { vmode: SMALL }, [], opens)
+  await readSkill($, 'vmode')
+  await $.command.run({ command: 'skill-map', args: 'minimize', presentation: { isFullscreen: true, columns: 200 } })
+  await readSkill($, 'vmode')
+  const band = await mountBand($)
+  expect([opens.length, (await band.find({ key: 'skill-map-expand' }))?.text, (await band.find({ text: 'weather' })) !== undefined]).toEqual([
+    1,
+    '[+] skills 1 · 0%',
+    true,
+  ])
+  await band.press({ key: 'skill-map-expand' })
+  expect([opens.length, await (await mountBand($)).find({ key: 'skill-map-expand' })]).toEqual([2, undefined])
+})
+
+test('/skill-map while minimized opens the pane and drops the chip', async ($, on) => {
+  const opens: string[] = []
+  engineBeneath(on, {}, [], opens)
+  await $.command.run({ command: 'skill-map', args: 'minimize', presentation: { isFullscreen: true, columns: 200 } })
+  expect((await $.command.run({ command: 'skill-map', args: '', presentation: { isFullscreen: true, columns: 200 } })).text).toBe('Skill map opened.')
+  expect([opens, await (await mountBand($)).find({ key: 'skill-map-expand' })]).toEqual([['skill-map'], undefined])
+})
+
+const seats = [
+  { id: 'docked: drawn', placement: 'dock' as const, isFullscreen: true, want: { isDrawn: true, closes: [], opens: [] } },
+  {
+    id: 'inline over a narrow fullscreen terminal: handed back to wait for a dock',
+    placement: 'inline' as const,
+    isFullscreen: true,
+    want: { isDrawn: false, closes: ['skill-map'], opens: ['skill-map'] },
+  },
+  { id: 'inline on the main screen, which has no dock: drawn', placement: 'inline' as const, isFullscreen: false, want: { isDrawn: true, closes: [], opens: [] } },
+]
+
+for (const row of seats) {
+  test(`seat: ${row.id}`, async ($, on) => {
+    const opens: string[] = []
+    const closes: string[] = []
+    engineBeneath(on, {}, [], opens, closes)
+    const clock = mock.clock(on)
+    const pane = await $.ui.mount({
+      plugin: 'skill-map',
+      surface: 'terminal',
+      component: 'Pane',
+      props: { title: 'Skills', isFocused: false, placement: row.placement, bodyColumns: 90 },
+      requestId: 'skill-map',
+      viewport: { columns: 90, rows: 40, isFullscreen: row.isFullscreen },
+    })
+    await clock.advance(1)
+    const isDrawn = (await pane.find({ text: 'No skills yet.' })) !== undefined
+    expect({ isDrawn, closes, opens }).toEqual(row.want)
+  })
+}
+
+test('/skill-map on a narrow fullscreen terminal says when the pane will show', async ($, on) => {
+  engineBeneath(on, {})
+  const reply = await $.command.run({ command: 'skill-map', args: '', presentation: { isFullscreen: true, columns: 90 } })
+  expect(reply.text).toBe('Skill map shows beside the transcript once the terminal is 110 columns wide.')
+})
 
 const rows = [
   { id: 'typed /bro row', text: `Base directory for this skill: /Users/me/.claude/skills/bro\n\n${SMALL}`, want: { skill: 'bro', tokens: 516 } },
@@ -141,6 +210,6 @@ test('compaction greys out a skill whose text is gone', async ($, on) => {
   on('session.compact', () => ({ messages: [{ role: 'user', text: 'Summary.', toolUses: [] }] }))
   await readSkill($, 'tiny')
   await $.session.compact({ trigger: 'manual', messages: [{ role: 'user', text: 'hi', toolUses: [] }] })
-  const pane = await $.ui.mount({ plugin: 'skill-map', surface: 'terminal', component: 'Pane', props: { title: 'Skills', isFocused: false }, requestId: 'skill-map' })
+  const pane = await $.ui.mount({ plugin: 'skill-map', surface: 'terminal', component: 'Pane', props: { title: 'Skills', isFocused: false, placement: 'dock' as const, bodyColumns: 17 }, requestId: 'skill-map' })
   expect(JSON.stringify(await pane.find({ key: 'skill-tiny' }))).toContain('"strikethrough":true')
 })
