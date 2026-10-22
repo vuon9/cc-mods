@@ -8,8 +8,6 @@ const PANE = 'skill-map'
 const COLUMNS = 17
 // Fullscreen docks a pane beside the transcript from this width.
 const DOCK_FROM = 110
-// From this width a row also fits its reload count, context positions and turn.
-const DETAILS_FROM = 30
 const loads = atom({ plugin: 'skill-map', key: 'loads' } as const, [])
 const used = atom({ plugin: 'skill-map', key: 'used' } as const, 0)
 const turn = atom({ plugin: 'skill-map', key: 'turn' } as const, 0)
@@ -29,6 +27,8 @@ const kilo = (tokens: number) => `${(tokens / 1000).toFixed(1)}k`
 
 const stats = (one: SkillLoad) =>
   `${kilo(one.tokens)} ${one.reloads > 0 ? `${one.firstPercent}→${one.lastPercent}%` : `${one.lastPercent}%`} t${one.turn}`
+
+const reloadTag = (one: SkillLoad) => (one.reloads > 0 ? ` [+${one.reloads}]` : '')
 
 const blockText = (block: { type: string; [field: string]: unknown }): string => {
   if (block.type === 'text') return String(block.text)
@@ -195,8 +195,10 @@ export const register: Register = on => {
     const fill = await read($, used)
     // Docked, fill the dock so dragging it wider shows long names whole; inline spans the terminal, so stay narrow.
     const width = e.props.placement === 'dock' ? e.props.bodyColumns : Math.min(COLUMNS, e.viewport?.columns ?? COLUMNS)
-    const isRoomy = width >= DETAILS_FROM
-    const barWidth = width - 5
+    // The terminal draws text right up to the dock's edge; one cell keeps it off.
+    const padding = e.surface === 'terminal' ? 1 : 0
+    const inner = width - padding
+    const barWidth = inner - 5
     const cells = Array.from({ length: barWidth }, (_, i) => {
       const at = list.findLast(one => Math.min(barWidth - 1, Math.floor((one.lastPercent / 100) * barWidth)) === i)
       if (at !== undefined) return { glyph: '▮', color: TIER_COLOR[tierOf(at.tokens)] }
@@ -204,7 +206,7 @@ export const register: Register = on => {
     })
 
     return (
-      <Box flexDirection="column" width={width}>
+      <Box flexDirection="column" width={width} paddingRight={padding}>
         <Text>
           {cells.map(cell => (
             <Text color={cell.color} dimColor={cell.color === undefined}>
@@ -219,20 +221,23 @@ export const register: Register = on => {
         </Text>
         <Text> </Text>
         {list.length === 0 && <Text dimColor>No skills yet.</Text>}
-        {list.map(one => (
-          <Box key={`skill-${one.skill}`} flexDirection="row" width={width}>
-            <Box flexGrow={1} flexShrink={1}>
-              <Text dimColor={one.isCompacted} strikethrough={one.isCompacted} wrap="truncate-end">
-                <Text color={TIER_COLOR[tierOf(one.tokens)]}>■ </Text>
-                {one.skill}
-                {isRoomy && one.reloads > 0 && <Text bold> [+{one.reloads}]</Text>}
-              </Text>
+        {list.map(one => {
+          const isOneLine = `■ ${one.skill}${reloadTag(one)} ${stats(one)}`.length <= inner
+          return (
+            <Box key={`skill-${one.skill}`} flexDirection={isOneLine ? 'row' : 'column'} width={inner}>
+              <Box flexGrow={1} flexShrink={1}>
+                <Text dimColor={one.isCompacted} strikethrough={one.isCompacted} wrap="truncate-end">
+                  <Text color={TIER_COLOR[tierOf(one.tokens)]}>■ </Text>
+                  {one.skill}
+                  {one.reloads > 0 && <Text bold>{reloadTag(one)}</Text>}
+                </Text>
+              </Box>
+              <Box flexShrink={0} paddingLeft={isOneLine ? 0 : 1}>
+                <Text dimColor> {stats(one)}</Text>
+              </Box>
             </Box>
-            <Box flexShrink={0}>
-              <Text dimColor> {isRoomy ? stats(one) : kilo(one.tokens)}</Text>
-            </Box>
-          </Box>
-        ))}
+          )
+        })}
       </Box>
     )
   })

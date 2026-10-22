@@ -26,27 +26,37 @@ function engineBeneath(on: On, bodies: Record<string, string>, openPanes: string
 
 const readSkill = ($: Engine, skill: string) => $.tool.call({ tool: 'Read', file_path: `/skills/${skill}/SKILL.md` })
 
-for (const surface of ['terminal', 'desktop'] as const) {
-  test(`${surface}: a roomy dock shows each skill's size, reloads, context positions and turn`, async ($, on) => {
+const surfaces = [
+  { surface: 'terminal' as const, rowWidth: 39 },
+  { surface: 'desktop' as const, rowWidth: 40 },
+]
+
+for (const row of surfaces) {
+  test(`${row.surface}: each skill shows its size, reloads, context positions and turn, padded right on the terminal only`, async ($, on) => {
     engineBeneath(on, { vmode: SMALL, big: MEDIUM })
     await readSkill($, 'vmode')
     await readSkill($, 'vmode')
     await readSkill($, 'big')
-    const pane = await $.ui.mount({ plugin: 'skill-map', surface, component: 'Pane', props: { title: 'Skills', isFocused: false, placement: 'dock' as const, bodyColumns: 40 }, requestId: 'skill-map' })
+    const pane = await $.ui.mount({ plugin: 'skill-map', surface: row.surface, component: 'Pane', props: { title: 'Skills', isFocused: false, placement: 'dock' as const, bodyColumns: 40 }, requestId: 'skill-map' })
     const rows = await Promise.all(['skill-vmode', 'skill-big'].map(key => pane.find({ key })))
-    expect(rows.map(row => row?.text)).toEqual(['■ vmode [+1] 0.5k 15→15% t0', '■ big 3.0k 15% t0'])
+    expect(rows.map(one => [one?.props.width, one?.text])).toEqual([
+      [row.rowWidth, '■ vmode [+1] 0.5k 15→15% t0'],
+      [row.rowWidth, '■ big 3.0k 15% t0'],
+    ])
   })
 }
 
+// `■ big [+1] 3.0k 15→15% t0` is 25 cells, and the terminal keeps the body's last column as padding.
 const widths = [
-  { id: 'docked at its opening width: name and size', placement: 'dock' as const, bodyColumns: 17, want: [17, '■ big 3.0k'] },
-  { id: 'docked and dragged wider: the details too', placement: 'dock' as const, bodyColumns: 40, want: [40, '■ big 3.0k 15% t0'] },
-  { id: 'inline across a wide terminal: stays narrow', placement: 'inline' as const, bodyColumns: 120, want: [17, '■ big 3.0k'] },
+  { id: 'docked at its opening width: details on a second line', placement: 'dock' as const, bodyColumns: 17, want: [16, 'column', '■ big [+1] 3.0k 15→15% t0'] },
+  { id: 'docked just wide enough: details on the same line', placement: 'dock' as const, bodyColumns: 26, want: [25, 'row', '■ big [+1] 3.0k 15→15% t0'] },
+  { id: 'inline across a wide terminal: stays narrow', placement: 'inline' as const, bodyColumns: 120, want: [16, 'column', '■ big [+1] 3.0k 15→15% t0'] },
 ]
 
 for (const row of widths) {
   test(`width: ${row.id}`, async ($, on) => {
     engineBeneath(on, { big: MEDIUM })
+    await readSkill($, 'big')
     await readSkill($, 'big')
     const pane = await $.ui.mount({
       plugin: 'skill-map',
@@ -57,7 +67,7 @@ for (const row of widths) {
       viewport: { columns: 120, rows: 40 },
     })
     const big = await pane.find({ key: 'skill-big' })
-    expect([big?.props.width, big?.text]).toEqual(row.want)
+    expect([big?.props.width, big?.props.flexDirection, big?.text]).toEqual(row.want)
   })
 }
 
