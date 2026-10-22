@@ -5,7 +5,7 @@ Small mods for Claude Code. A mod is a plugin with a hooks module: it can draw a
 ## Mods
 
 - [skill-map](plugins/skill-map): a side pane listing the skills loaded into the conversation, how big each one is, and how full the context was when it landed. Handy for spotting a big skill that got loaded twice.
-- [token-weather](plugins/token-weather): a one-line forecast of the context window above the prompt, with a sparkline of the last 12 turns and a guess at how the session is going for you.
+- [token-weather](plugins/token-weather): a one-line forecast of the context window above the prompt, with a sparkline of the last 12 turns and the model and effort in use.
 
 ## Install
 

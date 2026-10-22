@@ -98,52 +98,87 @@ test('the chart keeps the last 12 turns', async ($, on) => {
   expect(texts[2]).toBe('▃▃▄▄▅▅▆▆▇▇██')
 })
 
-const USAGE = {
-  input_tokens: 1,
-  output_tokens: 1,
-  cache_read_input_tokens: 0,
-  cache_creation_input_tokens: 0,
-}
+const OPUS_HIGH = { model: 'claude-opus-5-5[1m]', effort: 'high' }
 
-const MOOD_ROWS = [
-  { id: 'one reading', words: ['Confused.'], mood: '🤔\u{FE0F} Confused' },
-  { id: 'the latest reading wins', words: ['frustrated', 'upbeat'], mood: '😊\u{FE0F} Upbeat' },
-  { id: 'an unknown word is skipped', words: ['curious', 'sleepy'], mood: '🧐\u{FE0F} Curious' },
+const MODEL_ROWS = [
+  { id: 'model and effort', steps: [OPUS_HIGH], shown: ['│', 'Opus 5.5', '(high)'] },
+  {
+    id: 'the latest request wins after a /model switch',
+    steps: [OPUS_HIGH, { model: 'claude-sonnet-5-5', effort: 'max' }],
+    shown: ['│', 'Sonnet 5.5', '(max)'],
+  },
+  {
+    id: "a subagent's request does not count",
+    steps: [OPUS_HIGH, { model: 'claude-haiku-4-5', effort: 'low', agentId: 'a1' }],
+    shown: ['│', 'Opus 5.5', '(high)'],
+  },
+  { id: 'no request yet', steps: [], shown: [] },
+  {
+    id: 'a model without effort',
+    steps: [{ model: 'claude-fable-5-1' }],
+    shown: ['│', 'Fable 5.1'],
+  },
+  {
+    id: 'a dated id',
+    steps: [{ model: 'claude-haiku-4-5-20251001', effort: 'low' }],
+    shown: ['│', 'Haiku 4.5', '(low)'],
+  },
+  {
+    id: 'a dated id with no minor version',
+    steps: [{ model: 'claude-opus-4-20250514' }],
+    shown: ['│', 'Opus 4'],
+  },
+  {
+    id: 'a provider id',
+    steps: [{ model: 'us.anthropic.claude-sonnet-4-5-20250929-v1:0', effort: 'medium' }],
+    shown: ['│', 'Sonnet 4.5', '(medium)'],
+  },
+  {
+    id: 'an id it cannot read is shown as is',
+    steps: [{ model: 'opusplan' }],
+    shown: ['│', 'opusplan'],
+  },
 ]
 
-for (const row of MOOD_ROWS) {
-  test(`mood: ${row.id}`, async ($, on) => {
-    const asked: string[] = []
-    const replies = [...row.words]
+for (const row of MODEL_ROWS) {
+  test(`model: ${row.id}`, async ($, on) => {
     on('turn.complete', () => ({ text: '' }))
-    on('prompt.submit', () => ({ text: '' }) as never)
     on('ui.render', () => ({ type: 'Box' }))
     on('session.usage', () => ({
       value: { startedAt: 0, rateLimits: [], context: { tokens: 40_000, window: 200_000 } },
     }))
-    on('model.complete', ($, e) => {
-      asked.push(e.prompt)
-      return { value: { isAnswered: true, text: replies.shift()!, usage: USAGE } } as never
+    on('turn.step', async function* (_, e) {
+      return {
+        turnId: e.turnId,
+        index: e.index,
+        answer: '',
+        toolUses: [],
+        stopReason: 'end_turn',
+        usage: null,
+      } as never
     })
 
-    for (const [i] of row.words.entries()) {
-      await $.prompt.submit({ text: `prompt ${i}` } as never)
-      await $.turn.complete({
-        answer: `reply ${i}`,
-        durationMs: 1,
-        isAborted: false,
-        turnId: `t${i}`,
-        reason: 'completed',
-      } as never)
+    for (const [i, step] of row.steps.entries()) {
+      for await (const _ of $.turn.step({
+        turnId: 't0',
+        index: i,
+        messageCount: 1,
+        ...step,
+      } as never)) {
+      }
     }
-
-    expect(asked[0]).toContain('Developer: prompt 0')
-    expect(asked[0]).toContain("Assistant's last reply: reply 0")
+    await $.turn.complete({
+      answer: '',
+      durationMs: 1,
+      isAborted: false,
+      turnId: 't0',
+      reason: 'completed',
+    } as never)
 
     for (const surface of ['terminal', 'desktop'] as const) {
       const ui = await $.ui.mount({ plugin: 'token-weather', surface, ...BAND })
       const texts = (await ui.findAll({ type: 'Text' })).map(t => t.text.trim())
-      expect([surface, texts.slice(texts.indexOf('│') + 1)]).toEqual([surface, [row.mood]])
+      expect([row.id, surface, texts.slice(3)]).toEqual([row.id, surface, row.shown])
       await ui.unmount()
     }
   })
