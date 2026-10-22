@@ -216,8 +216,8 @@ export const register: Register = on => {
           <Text dimColor> {fill}%</Text>
         </Text>
         <Text dimColor>
-          <Text color={TIER_COLOR.small}>■</Text>&lt;2k <Text color={TIER_COLOR.medium}>■</Text>2-6k{' '}
-          <Text color={TIER_COLOR.large}>■</Text>6k+
+          <Text color={TIER_COLOR.small}>■ </Text>&lt;2 <Text color={TIER_COLOR.medium}>■ </Text>2-6{' '}
+          <Text color={TIER_COLOR.large}>■ </Text>6k+
         </Text>
         <Text> </Text>
         {list.length === 0 && <Text dimColor>No skills yet.</Text>}

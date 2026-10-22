@@ -71,6 +71,13 @@ for (const row of widths) {
   })
 }
 
+// Fonts like Iosevka draw ■ two cells wide, so each square needs a space after it, and 16 cells fit the opening width.
+test('legend: a space after each square, on one line at the opening width', async ($, on) => {
+  engineBeneath(on, {})
+  const pane = await $.ui.mount({ plugin: 'skill-map', surface: 'terminal', component: 'Pane', props: { title: 'Skills', isFocused: false, placement: 'dock' as const, bodyColumns: 17 }, requestId: 'skill-map' })
+  expect((await pane.find({ type: 'Text', text: /6k\+/ }))?.text).toBe('■ <2 ■ 2-6 ■ 6k+')
+})
+
 const commands = [
   { id: 'cat alone counts', command: 'cat /skills/tiny/SKILL.md', isCounted: true },
   { id: 'cat then another command counts', command: 'cat "/skills/tiny/SKILL.md"; ls /skills/tiny', isCounted: true },
