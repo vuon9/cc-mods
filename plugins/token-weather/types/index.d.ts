@@ -1,13 +1,12 @@
-export type Mood = 'upbeat' | 'neutral' | 'curious' | 'confused' | 'frustrated'
+export type ModelInUse = { id: string; effort?: string | number }
 
 declare module 'claude-code' {
   interface PluginState {
     'token-weather': {
       history: number[]
       window: number
-      mood: Mood | null
-      prompts: string[]
       isCompacted: boolean
+      model: ModelInUse | null
     }
   }
 }
