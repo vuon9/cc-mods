@@ -6,8 +6,8 @@
   },
   "plugins": [
     {
-      "name": "skill-map",
-      "source": "./plugins/skill-map",
+      "name": "skills-pane",
+      "source": "./plugins/skills-pane",
       "description": "Pane showing which skills are loaded into the main conversation, how big they are, and where in the context window they landed"
     },
     {

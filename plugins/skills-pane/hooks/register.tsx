@@ -3,15 +3,15 @@ import type { EngineInterface, Register, SessionMessage } from 'claude-code'
 
 import type { SkillLoad } from '../types'
 
-const PANE = 'skill-map'
+const PANE = 'skills-pane'
 // The dock adds 2 cells, so 19 at a ~7.6px cell stays under a 150px cap.
 const COLUMNS = 17
 // Fullscreen docks a pane beside the transcript from this width.
 const DOCK_FROM = 110
-const loads = atom({ plugin: 'skill-map', key: 'loads' } as const, [])
-const used = atom({ plugin: 'skill-map', key: 'used' } as const, 0)
-const turn = atom({ plugin: 'skill-map', key: 'turn' } as const, 0)
-const minimized = atom({ plugin: 'skill-map', key: 'minimized' } as const, false)
+const loads = atom({ plugin: 'skills-pane', key: 'loads' } as const, [])
+const used = atom({ plugin: 'skills-pane', key: 'used' } as const, 0)
+const turn = atom({ plugin: 'skills-pane', key: 'turn' } as const, 0)
+const minimized = atom({ plugin: 'skills-pane', key: 'minimized' } as const, false)
 
 const SMALL_MAX = 2000
 const MEDIUM_MAX = 6000
@@ -93,38 +93,37 @@ async function record($: EngineInterface, skill: string, tokens: number) {
     }
     return old === undefined ? [...list, entry] : list.map(one => (one === old ? entry : one))
   })
-  if (!(await read($, minimized)) && !(await isPaneUp($))) void open($)
 }
 
 export const register: Register = on => {
   on('session.start', async ($, e, next) => {
     await $.command.register({
-      name: 'skill-map',
-      description: 'Toggle the pane of skills loaded into this conversation; `/skill-map minimize` folds it above the prompt, `/skill-map reset` clears it',
+      name: 'skills-pane',
+      description: 'Toggle the pane of skills loaded into this conversation; `/skills-pane minimize` folds it above the prompt, `/skills-pane reset` clears it',
     })
     return next(e)
   })
 
-  on('command.run', { command: 'skill-map' }, async ($, e) => {
+  on('command.run', { command: 'skills-pane' }, async ($, e) => {
     if (e.args.trim() === 'reset') {
       await update($, loads, () => [])
-      return { text: 'Skill map cleared.' }
+      return { text: 'Skills pane cleared.' }
     }
     if (e.args.trim() === 'minimize') {
       await update($, minimized, () => true)
       await $.ui.close({ id: PANE })
-      return { text: 'Skill map minimized to [+] above the prompt.' }
+      return { text: 'Skills pane minimized to [+] above the prompt.' }
     }
     const wasOpen = await isPaneUp($)
     await update($, minimized, () => false)
     if (wasOpen) await $.ui.close({ id: PANE })
     else await open($)
-    if (wasOpen) return { text: 'Skill map closed.' }
+    if (wasOpen) return { text: 'Skills pane closed.' }
     const isNarrow = e.presentation.isFullscreen && e.presentation.columns < DOCK_FROM
-    return { text: isNarrow ? `Skill map shows beside the transcript once the terminal is ${DOCK_FROM} columns wide.` : 'Skill map opened.' }
+    return { text: isNarrow ? `Skills pane shows beside the transcript once the terminal is ${DOCK_FROM} columns wide.` : 'Skills pane opened.' }
   })
 
-  // The ✕ is the engine's; a person's close minimizes to the band, `/skill-map` closes for good.
+  // The ✕ is the engine's; a person's close minimizes to the band, `/skills-pane` closes for good.
   on('ui.close', { id: PANE }, async ($, e, next) => {
     const result = await next(e)
     if (e.origin.kind === 'person') await update($, minimized, () => true)
@@ -140,7 +139,7 @@ export const register: Register = on => {
       <Box>
         {await next(e)}
         <Box marginLeft={2}>
-          <Button plain key="skill-map-expand" onPress={() => expand($)}>
+          <Button plain key="skills-pane-expand" onPress={() => expand($)}>
             [+] <Text dimColor>skills {list.length} · {fill}%</Text>
           </Button>
         </Box>
