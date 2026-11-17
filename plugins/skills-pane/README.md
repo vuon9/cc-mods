@@ -1,6 +1,6 @@
-# skill-map
+# skills-pane
 
-![skill-map pane with six skills, one reloaded and three greyed out after a compaction](screenshot.png)
+![skills-pane with six skills, one reloaded and three greyed out after a compaction](screenshot.png)
 
 <sub>Drawn by the mod from sample data.</sub>
 
@@ -19,9 +19,9 @@ A side pane listing every skill loaded into the main conversation, each with its
 - After a compaction, a skill whose text was summarized away turns grey and crossed out.
 - The bar on top is the context window, filled to current usage, with a marker where each skill landed.
 
-`/skill-map` opens or closes the pane. `/skill-map reset` clears it. The pane opens by itself on the first skill load. In fullscreen it is a sidebar only: it docks beside the transcript from 110 columns, and on a narrower terminal it waits, undrawn, until the terminal is wide enough. On the main screen, which has no dock, it sits above the prompt at 17 columns. Docked, it opens 17 columns wide (about 145px), puts the details under each name and cuts long names with `…`; drag the dock wider and each skill fits on one line. On the terminal the pane leaves its rightmost column empty, so text doesn't run into the dock's edge. A width you drag to is kept in `~/.claude.json` as `pluginPanes.dockColumns` and wins over the 17.
+`/skills-pane` opens or closes the pane. `/skills-pane reset` clears it. The pane stays closed until you open it. Skill loads are recorded while it is closed, so it is full when you do. In fullscreen it is a sidebar only: it docks beside the transcript from 110 columns, and on a narrower terminal it waits, undrawn, until the terminal is wide enough. On the main screen, which has no dock, it sits above the prompt at 17 columns. Docked, it opens 17 columns wide (about 145px), puts the details under each name and cuts long names with `…`; drag the dock wider and each skill fits on one line. On the terminal the pane leaves its rightmost column empty, so text doesn't run into the dock's edge. A width you drag to is kept in `~/.claude.json` as `pluginPanes.dockColumns` and wins over the 17.
 
-The pane's `✕`, or `/skill-map minimize`, minimizes it to a `[+] skills 8 · 29%` chip on the row above the prompt; click the chip to bring the pane back. While minimized, new skill loads update the chip instead of reopening the pane. `/skill-map` still closes it for good. Mods that draw on that row take turns in the order they load, and the first one wins the row, so load skill-map before them (`CLAUDE_CODE_PLUGIN_DIRS=~/.claude/mods/skill-map:~/.claude/mods/token-weather`) or its chip won't show.
+The pane's `✕`, or `/skills-pane minimize`, minimizes it to a `[+] skills 8 · 29%` chip on the row above the prompt; click the chip to bring the pane back. New skill loads update the chip. `/skills-pane` still closes it for good. Mods that draw on that row take turns in the order they load, and the first one wins the row, so load skills-pane before them (`CLAUDE_CODE_PLUGIN_DIRS=~/.claude/mods/skills-pane:~/.claude/mods/token-weather`) or its chip won't show.
 
 Only the main conversation counts. Skills a subagent loads stay in the subagent's context and are left out.
 
@@ -29,10 +29,10 @@ Only the main conversation counts. Skills a subagent loads stay in the subagent'
 
 ```bash
 claude plugin marketplace add vuon9/cc-mods
-claude plugin install skill-map@cc-mods
+claude plugin install skills-pane@cc-mods
 ```
 
-Update with `claude plugin update skill-map`.
+Update with `claude plugin update skills-pane`.
 
 ## Limits
 
@@ -45,6 +45,6 @@ Update with `claude plugin update skill-map`.
 From the repo root:
 
 ```bash
-claude --plugin-dir plugins/skill-map
-claude plugin test plugins/skill-map
+claude --plugin-dir plugins/skills-pane
+claude plugin test plugins/skills-pane
 ```

@@ -10,6 +10,6 @@ export type SkillLoad = {
 
 declare module 'claude-code' {
   interface PluginState {
-    'skill-map': { loads: SkillLoad[]; used: number; turn: number; minimized: boolean }
+    'skills-pane': { loads: SkillLoad[]; used: number; turn: number; minimized: boolean }
   }
 }
